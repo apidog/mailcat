@@ -1,0 +1,677 @@
+openapi: 3.1.0
+info:
+  title: MailCat API
+  description: |
+    🐱 Email superpowers for AI agents.
+    
+    Create a mailbox in one API call. Verification codes extracted automatically.
+    
+    ## Response Format
+    
+    All successful responses use a strict envelope format:
+    ```json
+    {
+      "data": { ... },
+      "meta": {
+        "agentHints": { ... },
+        "pagination": { ... }
+      }
+    }
+    ```
+    
+    ## Standards Compliance
+    
+    - **Timestamps**: ISO 8601 / RFC 3339 format (`2025-02-21T08:00:00Z`)
+    - **Rate Limiting**: IETF draft-ietf-httpapi-ratelimit-headers
+    - **Errors**: RFC 9457 Problem Details
+  version: 1.0.0
+  contact:
+    url: https://mailcat.ai
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.mailcat.ai
+    description: Production server
+
+tags:
+  - name: Public
+    description: Public endpoints (no authentication required)
+  - name: Mailbox
+    description: Mailbox operations (authentication required)
+
+paths:
+  /mailboxes:
+    post:
+      tags:
+        - Public
+      summary: Create a new mailbox
+      description: |
+        Creates a new mailbox and returns the email address and authentication token.
+        **Save your token!** It cannot be recovered.
+      operationId: createMailbox
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Custom mailbox name (optional)
+                  pattern: ^[a-z0-9_-]{3,30}$
+                  example: my-agent
+            examples:
+              random:
+                summary: Random name (default)
+                value: {}
+              custom:
+                summary: Custom name
+                value:
+                  name: my-agent
+      responses:
+        '201':
+          description: Mailbox created successfully
+          headers:
+            RateLimit-Limit:
+              $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+              $ref: '#/components/headers/RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateMailboxResponse'
+              example:
+                data:
+                  email: swift-coral-42@mailcat.ai
+                  token: a1b2c3d4e5f6...
+                meta:
+                  agentHints:
+                    suggestion: Store the token securely - it cannot be recovered
+                    tip: Set up periodic inbox polling every 5-10 minutes
+                    nextSteps:
+                      - Save token to secure storage
+                      - Poll GET /inbox for incoming emails
+                      - Read emails with GET /emails/{id}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /health:
+    get:
+      tags:
+        - Public
+      summary: Health check
+      description: Returns service health status and version
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                data:
+                  status: healthy
+                  version: "1.0.0"
+                  timestamp: "2025-02-21T08:00:00Z"
+
+  /skill.md:
+    get:
+      tags:
+        - Public
+      summary: API documentation for AI agents
+      description: Returns API documentation in Markdown format optimized for AI agents
+      operationId: getSkillMd
+      responses:
+        '200':
+          description: API documentation
+          content:
+            text/markdown:
+              schema:
+                type: string
+
+  /inbox:
+    get:
+      tags:
+        - Mailbox
+      summary: List emails
+      description: Returns a list of emails in the mailbox with pagination
+      operationId: getInbox
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of emails to return (1-100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          description: Pagination cursor from previous response
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of emails
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboxResponse'
+              example:
+                data:
+                  - id: 550e8400-e29b-41d4-a716-446655440000
+                    from: noreply@example.com
+                    subject: Verify your account
+                    receivedAt: "2025-02-21T08:00:00Z"
+                    read: false
+                meta:
+                  mailbox: swift-coral-42@mailcat.ai
+                  unread: 1
+                  agentHints:
+                    suggestion: Check for verification codes in unread emails
+                    tip: Emails auto-delete after 1 hour
+                    nextSteps:
+                      - Read unread emails with GET /emails/{id}
+                      - Use extracted 'code' field for verification
+                  pagination:
+                    nextCursor: null
+                    hasMore: false
+                    totalCount: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /emails/{id}:
+    get:
+      tags:
+        - Mailbox
+      summary: Get email with extracted data
+      description: |
+        Returns the full email content with auto-extracted verification codes and action links.
+        Marks the email as read.
+      operationId: getEmail
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Email ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Email with extracted data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailResponse'
+              example:
+                data:
+                  email:
+                    id: 550e8400-e29b-41d4-a716-446655440000
+                    from: noreply@example.com
+                    fromName: Example Service
+                    to: swift-coral-42@mailcat.ai
+                    subject: Verify your account
+                    text: Your verification code is 887766
+                    html: <p>Your verification code is <strong>887766</strong></p>
+                    receivedAt: "2025-02-21T08:00:00Z"
+                    size: 1024
+                  code: "887766"
+                  links:
+                    - https://example.com/verify?token=abc123
+                meta:
+                  agentHints:
+                    suggestion: Use the extracted code for verification
+                    tip: Verification codes typically expire in 5-10 minutes
+                    nextSteps:
+                      - Submit code to the service that sent this email
+                      - Or click the verification link directly
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Mailbox
+      summary: Delete email
+      description: Permanently deletes an email from the mailbox
+      operationId: deleteEmail
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Email ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Email deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /stats:
+    get:
+      tags:
+        - Mailbox
+      summary: Get mailbox statistics
+      description: Returns statistics about the mailbox
+      operationId: getStats
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Mailbox statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+              example:
+                data:
+                  email: swift-coral-42@mailcat.ai
+                  createdAt: "2025-02-21T07:00:00Z"
+                  lastActivity: "2025-02-21T08:00:00Z"
+                  totalEmails: 5
+                  unreadEmails: 2
+                  totalSize: 10240
+                meta:
+                  agentHints:
+                    suggestion: You have 2 unread emails to process
+                    tip: Check /inbox for new verification emails
+                    nextSteps:
+                      - Poll /inbox to retrieve unread emails
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Token returned from POST /mailboxes
+
+  headers:
+    RateLimit-Limit:
+      description: Maximum number of requests allowed in the time window
+      schema:
+        type: integer
+        example: 60
+    RateLimit-Remaining:
+      description: Number of requests remaining in the current time window
+      schema:
+        type: integer
+        example: 59
+    RateLimit-Reset:
+      description: Unix timestamp (seconds) when the rate limit window resets
+      schema:
+        type: integer
+        example: 1708502400
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            type: "https://mailcat.ai/errors/invalid_name"
+            title: "Invalid Name"
+            status: 400
+            detail: "Invalid name. Use 3-30 lowercase letters, numbers, hyphens, or underscores."
+
+    Unauthorized:
+      description: Missing or invalid authentication token
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            type: "https://mailcat.ai/errors/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "Missing or invalid Authorization header"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            type: "https://mailcat.ai/errors/not_found"
+            title: "Not Found"
+            status: 404
+            detail: "Email not found"
+
+    Conflict:
+      description: Resource conflict
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            type: "https://mailcat.ai/errors/name_taken"
+            title: "Name Already Taken"
+            status: 409
+            detail: "This mailbox name is already in use."
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        RateLimit-Limit:
+          $ref: '#/components/headers/RateLimit-Limit'
+        RateLimit-Remaining:
+          $ref: '#/components/headers/RateLimit-Remaining'
+        RateLimit-Reset:
+          $ref: '#/components/headers/RateLimit-Reset'
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+            example: 60
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            type: "https://mailcat.ai/errors/rate_limit_exceeded"
+            title: "Rate Limit Exceeded"
+            status: 429
+            detail: "Too many requests. Please try again later."
+
+  schemas:
+    # === Agent Hints (for LLM guidance) ===
+    AgentHints:
+      type: object
+      description: |
+        Optional contextual hints for LLM Agents. 
+        All fields are optional. Use field names appropriate for the context.
+      properties:
+        suggestion:
+          type: string
+          description: Main suggestion for what to do with this response
+        tip:
+          type: string
+          description: Helpful tip or important note
+        nextSteps:
+          type: array
+          items:
+            type: string
+          description: Recommended next actions
+        warning:
+          type: string
+          description: Important warning or caveat
+      additionalProperties: true
+
+    # === Pagination (offset or cursor based) ===
+    Pagination:
+      type: object
+      description: Pagination info. Can use offset-based or cursor-based depending on endpoint.
+      properties:
+        # Offset-based
+        offset:
+          type: integer
+          description: Current offset (offset-based pagination)
+        limit:
+          type: integer
+          description: Items per page
+        # Cursor-based
+        nextCursor:
+          type: string
+          nullable: true
+          description: Cursor for next page (cursor-based pagination)
+        # Common
+        hasMore:
+          type: boolean
+          description: Whether there are more items
+        totalCount:
+          type: integer
+          description: Total number of items
+
+    # === Response Schemas ===
+    CreateMailboxResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - email
+            - token
+          properties:
+            email:
+              type: string
+              format: email
+              description: The created email address
+            token:
+              type: string
+              description: Authentication token (save this, it cannot be recovered)
+        meta:
+          type: object
+          properties:
+            agentHints:
+              $ref: '#/components/schemas/AgentHints'
+
+    HealthResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - status
+            - version
+            - timestamp
+          properties:
+            status:
+              type: string
+              enum:
+                - healthy
+            version:
+              type: string
+              description: API version
+            timestamp:
+              type: string
+              format: date-time
+              description: Current server time (ISO 8601)
+
+    InboxResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailSummary'
+        meta:
+          type: object
+          properties:
+            mailbox:
+              type: string
+              format: email
+              description: Mailbox email address
+            unread:
+              type: integer
+              description: Number of unread emails
+            agentHints:
+              $ref: '#/components/schemas/AgentHints'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+
+    EmailSummary:
+      type: object
+      required:
+        - id
+        - from
+        - subject
+        - receivedAt
+        - read
+      properties:
+        id:
+          type: string
+          format: uuid
+        from:
+          type: string
+          format: email
+        subject:
+          type: string
+        receivedAt:
+          type: string
+          format: date-time
+          description: When the email was received (ISO 8601)
+        read:
+          type: boolean
+
+    EmailResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - email
+          properties:
+            email:
+              $ref: '#/components/schemas/EmailDetail'
+            code:
+              type: string
+              nullable: true
+              description: Auto-extracted verification code (OTP, PIN, etc.)
+            links:
+              type: array
+              nullable: true
+              items:
+                type: string
+                format: uri
+              description: Auto-extracted action links (verify, confirm, reset, etc.)
+        meta:
+          type: object
+          properties:
+            agentHints:
+              $ref: '#/components/schemas/AgentHints'
+
+    EmailDetail:
+      type: object
+      required:
+        - id
+        - from
+        - to
+        - subject
+        - text
+        - receivedAt
+        - size
+      properties:
+        id:
+          type: string
+          format: uuid
+        from:
+          type: string
+          format: email
+        fromName:
+          type: string
+          nullable: true
+        to:
+          type: string
+          format: email
+        subject:
+          type: string
+        text:
+          type: string
+          description: Plain text body
+        html:
+          type: string
+          nullable: true
+          description: HTML body (if available)
+        receivedAt:
+          type: string
+          format: date-time
+          description: When the email was received (ISO 8601)
+        size:
+          type: integer
+          description: Email size in bytes
+
+    StatsResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - email
+            - createdAt
+            - lastActivity
+            - totalEmails
+            - unreadEmails
+            - totalSize
+          properties:
+            email:
+              type: string
+              format: email
+            createdAt:
+              type: string
+              format: date-time
+              description: When the mailbox was created (ISO 8601)
+            lastActivity:
+              type: string
+              format: date-time
+              description: Last activity time (ISO 8601)
+            totalEmails:
+              type: integer
+            unreadEmails:
+              type: integer
+            totalSize:
+              type: integer
+              description: Total size of all emails in bytes
+        meta:
+          type: object
+          properties:
+            agentHints:
+              $ref: '#/components/schemas/AgentHints'
+
+    ErrorResponse:
+      type: object
+      description: RFC 9457 Problem Details
+      required:
+        - type
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI reference identifying the problem type
+        title:
+          type: string
+          description: Short human-readable summary
+        status:
+          type: integer
+          description: HTTP status code
+        detail:
+          type: string
+          description: Human-readable explanation

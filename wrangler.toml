@@ -1,0 +1,33 @@
+name = "mailcat"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# Replace with your Cloudflare account ID
+# account_id = "your-account-id"
+
+# ===========================================
+# Storage Backend: D1 (recommended) or KV
+# ===========================================
+
+# D1 Database (recommended)
+# Create with: npx wrangler d1 create mailcat
+# Then run: npx wrangler d1 execute mailcat --remote --file=db/schema.sql
+[[d1_databases]]
+binding = "DB"
+database_name = "mailcat"
+database_id = "your-d1-database-id"
+
+# KV Namespace (rate limiting)
+# Create with: npx wrangler kv:namespace create MAILCAT
+[[kv_namespaces]]
+binding = "MAILCAT"
+id = "your-kv-namespace-id"
+
+[vars]
+EMAIL_DOMAIN = "mailcat.ai"
+EMAIL_RETENTION_MS = "3600000"
+STORAGE_BACKEND = "d1"  # "d1" (default) or "kv"
+
+# Production secrets (set via wrangler secret put):
+# - WEBHOOK_SECRET
+# - TEST_BYPASS_TOKEN

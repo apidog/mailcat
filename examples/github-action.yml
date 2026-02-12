@@ -1,0 +1,71 @@
+# GitHub Action Example: Email Verification Testing
+#
+# This workflow demonstrates how to use MailCat for E2E testing
+# in your CI/CD pipeline.
+#
+# Add this to your repository's .github/workflows/ directory
+
+name: E2E Tests with Email Verification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Create MailCat Mailbox
+        id: mailcat
+        run: |
+          RESPONSE=$(curl -s -X POST https://api.mailcat.ai/register)
+          echo "email=$(echo $RESPONSE | jq -r '.email')" >> $GITHUB_OUTPUT
+          echo "token=$(echo $RESPONSE | jq -r '.token')" >> $GITHUB_OUTPUT
+      
+      - name: Run E2E Tests
+        env:
+          TEST_EMAIL: ${{ steps.mailcat.outputs.email }}
+          MAILCAT_TOKEN: ${{ steps.mailcat.outputs.token }}
+        run: |
+          # Your E2E tests can now use TEST_EMAIL for signups
+          # and MAILCAT_TOKEN to check for verification emails
+          npm run test:e2e
+      
+      - name: Check for Verification Email
+        env:
+          MAILCAT_TOKEN: ${{ steps.mailcat.outputs.token }}
+        run: |
+          # Poll for email (with timeout)
+          for i in {1..12}; do
+            INBOX=$(curl -s -H "Authorization: Bearer $MAILCAT_TOKEN" https://api.mailcat.ai/inbox)
+            COUNT=$(echo $INBOX | jq -r '.count')
+            
+            if [ "$COUNT" -gt "0" ]; then
+              EMAIL_ID=$(echo $INBOX | jq -r '.emails[0].id')
+              EMAIL=$(curl -s -H "Authorization: Bearer $MAILCAT_TOKEN" https://api.mailcat.ai/email/$EMAIL_ID)
+              
+              echo "Email received!"
+              echo "Subject: $(echo $EMAIL | jq -r '.email.subject')"
+              echo "Code: $(echo $EMAIL | jq -r '.code')"
+              exit 0
+            fi
+            
+            echo "Waiting for email... (attempt $i/12)"
+            sleep 10
+          done
+          
+          echo "No email received within timeout"
+          exit 1

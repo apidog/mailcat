@@ -1,0 +1,43 @@
+{
+  "name": "mailcat",
+  "version": "1.0.0",
+  "description": "Email service for AI agents",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "vitest run test/e2e.test.ts",
+    "test:load": "RUN_LOAD_TESTS=true vitest run test/load.test.ts",
+    "test:benchmark": "RUN_BENCHMARKS=true vitest run test/load.test.ts",
+    "test:all": "vitest run --include='test/**/*.test.ts'",
+    "kv:create": "wrangler kv:namespace create MAILCAT",
+    "kv:create:preview": "wrangler kv:namespace create MAILCAT --preview",
+    "db:migrate": "wrangler d1 migrations apply mailcat --remote",
+    "db:migrate:local": "wrangler d1 migrations apply mailcat --local",
+    "check": "./scripts/check-consistency.sh",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:prod": "wrangler deploy"
+  },
+  "keywords": [
+    "email",
+    "ai",
+    "agents",
+    "cloudflare",
+    "workers"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260219.0",
+    "@vitest/coverage-v8": "^3.0.0",
+    "@vitest/ui": "^3.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.0.0",
+    "wrangler": "^4.67.0"
+  }
+}

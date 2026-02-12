@@ -1,0 +1,5 @@
+# Development environment variables
+# Copy to .dev.vars and fill in values
+
+# Token to bypass rate limits in tests
+TEST_BYPASS_TOKEN=your-test-token
